@@ -8,10 +8,13 @@ import (
 	"github.com/golang/glog"
 	"io"
 	"net/http"
+	"strconv"
 )
 
 type Auth2ReadWriteCloser interface {
-	Auth(token string) (tunnel io.ReadWriteCloser, contentLen int64)
+	// if writable less than 0, the result will not limit output content length
+	// if readable less than 0, JungleMan will keep read tunnel untill EOF
+	Auth(token string, writable int64) (tunnel io.ReadWriteCloser, readable int64)
 }
 
 type JungleMan struct {
@@ -33,22 +36,34 @@ func (this *JungleMan) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 
 	// authorize
-	tunnel, contentLen := this.A2RWC.Auth(req.RequestURI)
+	tunnel, contentLen := this.A2RWC.Auth(req.RequestURI, req.ContentLength)
 	if tunnel == nil { // didn't pass the auth
 		return
 	}
 	defer tunnel.Close()
 
 	if req.Method != "GET" { // the post data reading
-		_, err := CopyInTime(tunnel, req.Body, req.ContentLength)
+
+		input := req.Body.(io.Reader)
+		if req.ContentLength >= 0 {
+			input = io.LimitReader(req.Body, req.ContentLength)
+		}
+		_, err := CopyInTime(tunnel, input)
 		if err != nil && err != io.EOF { // for now, just collecting it in log
 			glog.Warningln("failed when jungle man is reading from http body, ", err)
 			// keep going, cause this is an alive tunnel, not one request
 		}
 	}
 
+	input := tunnel.(io.Reader)
+	// specified response content length
+	if contentLen >= 0 {
+		resp.Header().Set("Content-Length", strconv.FormatInt(contentLen, 10))
+		input = io.LimitReader(input, contentLen)
+	}
+
 	// return the data
-	_, err := CopyInTime(resp, tunnel, contentLen)
+	_, err := CopyInTime(resp, input)
 	if err != nil && err != io.EOF { // for now, just collecting it in log
 		glog.Warningln("failed when jungle man is writting back, ", err)
 	}

@@ -4,7 +4,7 @@ This project is just only for the very experimentation and implementation of my 
 
 This project is under BSD 3-clause License, feel free to use it.
 
-NOTICE, if this repository offends any groups and/or individuals, I didn't mean it. Email me, and let me fix it.
+NOTICE, if this repository offends any groups' and/or individuals' right, I didn't mean it. Email me, and let me fix it.
 
 ## install
 
@@ -15,6 +15,6 @@ NOTICE, if this repository offends any groups and/or individuals, I didn't mean 
 ## usage
 
 ```bash
-$GOPATH/bin/jorm-srv --help
-$GOPATH/bin/jorm-cli --help
+$GOPATH/bin/jormsrv --help
+$GOPATH/bin/jormcli --help
 ```

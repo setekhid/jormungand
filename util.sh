@@ -25,7 +25,7 @@ EndOfGitIgnore
 		;;
 
 	build)
-		go get github.com/setekhid/jormungand/cmd/jorm-srv
-		go get github.com/setekhid/jormungand/cmd/jorm-cli
+		go get github.com/setekhid/jormungand/cmd/jormsrv
+		go get github.com/setekhid/jormungand/cmd/jormcli
 		;;
 esac

@@ -1,4 +1,4 @@
-## ifgo
+## tungo
 
 This is a tuntap stuff library written in golang, and inspired by github.com/songgao/water
 

@@ -6,6 +6,7 @@ package jormungand
 
 import (
 	"github.com/setekhid/jormungand/tungo"
+	_ "golang.org/x/net/ipv4"
 	"io"
 )
 
@@ -39,10 +40,13 @@ func (this *Router) Start() error {
 }
 
 func (this *Router) Stop() {
+
+	this.tun.Close()
 }
 
 // Override comet.Auth2ReadWriteCloser.Auth
-func (this *Router) Auth(token string) (io.ReadWriteCloser, int64) {
+func (this *Router) Auth(token string, writable int64) (io.ReadWriteCloser, int64) {
+
 	// TODO
-	return nil, -1
+	return nil, 0
 }

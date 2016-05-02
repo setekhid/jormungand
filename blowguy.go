@@ -5,34 +5,51 @@
 package jormungand
 
 import (
+	"github.com/golang/glog"
 	_ "golang.org/x/crypto/blowfish" // TODO
+	"math"
 )
 
 type BlowGuy struct {
+	keys map[uint32][]byte
 }
 
 func NewBlowGuy() *BlowGuy {
 
-	return &BlowGuy{}
+	return &BlowGuy{
+		keys: map[uint32][]byte{},
+	}
 }
 
-func (this *BlowGuy) Encrypt(pkg []byte) []byte {
+func (this *BlowGuy) Encrypt(id uint32, pkt []byte) {
 
 	// TODO
-	rtn := make([]byte, len(pkg))
-	copy(rtn, pkg)
-	return rtn
 }
 
-func (this *BlowGuy) Decrypt(pkg []byte) []byte {
+func (this *BlowGuy) Decrypt(id uint32, pkt []byte) {
 
 	// TODO
-	rtn := make([]byte, len(pkg))
-	copy(rtn, pkg)
-	return rtn
 }
 
-func (this *BlowGuy) RegKey(id []byte, key []byte) {
+func (this *BlowGuy) Checksum(pkt []byte) uint32 {
 
 	// TODO
+	return 0
+}
+
+func (this *BlowGuy) BlockCeil(len int) int {
+	return int(math.Ceil(float64(len)/8.0) * 8.0)
+}
+
+func (this *BlowGuy) BlockFloor(len int) int {
+	return int(math.Floor(float64(len)/8.0) * 8.0)
+}
+
+func (this *BlowGuy) RegKey(id uint32, key []byte) {
+
+	if _, exists := this.keys[id]; exists {
+		glog.Warningln("blow guy already knew this id ", id)
+	}
+
+	this.keys[id] = key
 }

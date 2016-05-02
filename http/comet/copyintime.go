@@ -9,7 +9,7 @@ import (
 	"net/http"
 )
 
-func CopyInTime(dst io.Writer, src io.Reader, n int64) (int64, error) {
+func CopyInTime(dst io.Writer, src io.Reader) (int64, error) {
 
 	// dst flusher
 	flush := func() {}

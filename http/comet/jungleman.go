@@ -11,14 +11,14 @@ import (
 	"strconv"
 )
 
-type Auth2ReadWriteCloser interface {
+type TunnelAuthor interface {
 	// if writable less than 0, the result will not limit output content length
 	// if readable less than 0, JungleMan will keep read tunnel untill EOF
 	Auth(token string, writable int64) (tunnel io.ReadWriteCloser, readable int64)
 }
 
 type JungleMan struct {
-	A2RWC Auth2ReadWriteCloser
+	Author TunnelAuthor
 }
 
 // Override http.Handler.ServeHTTP
@@ -36,13 +36,13 @@ func (this *JungleMan) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 
 	// authorize
-	tunnel, contentLen := this.A2RWC.Auth(req.RequestURI, req.ContentLength)
+	tunnel, contentLen := this.Author.Auth(req.RequestURI, req.ContentLength)
 	if tunnel == nil { // didn't pass the auth
 		return
 	}
 	defer tunnel.Close()
 
-	if req.Method != "GET" { // the post data reading
+	if req.Method == "POST" { // the post data reading
 
 		input := req.Body.(io.Reader)
 		if req.ContentLength >= 0 {

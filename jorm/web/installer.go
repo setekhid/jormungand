@@ -10,16 +10,29 @@ import (
 	"github.com/setekhid/jormungand/http/comet"
 )
 
-type VeryInstaller struct {
-	jman comet.JungleMan
+var (
+	jman = (*comet.JungleMan)(nil)
+
+	installers = []Installer{
+		&VeryInstaller{},
+		&FakerInstaller{},
+		&SwaggerInstaller{},
+	}
+)
+
+func Installers() []Installer {
+
+	if jman == nil {
+		panic("web installers need a JungleMan, but got nil")
+	}
+	return installers
 }
 
-func NewVeryInstaller(a2rwc comet.Auth2ReadWriteCloser) Installer {
-	return &VeryInstaller{
-		jman: comet.JungleMan{
-			A2RWC: a2rwc,
-		},
-	}
+func RegistTunnelAuthor(author comet.TunnelAuthor) {
+	jman = &comet.JungleMan{Author: author}
+}
+
+type VeryInstaller struct {
 }
 
 func (this *VeryInstaller) Install(restC *restful.Container) {
@@ -48,20 +61,16 @@ func (this *VeryInstaller) Install(restC *restful.Container) {
 func (this *VeryInstaller) exchange(_req *restful.Request, _resp *restful.Response) {
 	token := _req.PathParameter("dumpFile")
 	_ = token
-	this.jman.ServeHTTP(_resp.ResponseWriter, _req.Request)
+	jman.ServeHTTP(_resp.ResponseWriter, _req.Request)
 }
 
 func (this *VeryInstaller) download(_req *restful.Request, _resp *restful.Response) {
 	token := _req.PathParameter("dumpFile")
 	_ = token
-	this.jman.ServeHTTP(_resp.ResponseWriter, _req.Request)
+	jman.ServeHTTP(_resp.ResponseWriter, _req.Request)
 }
 
 type FakerInstaller struct {
-}
-
-func NewFakerInstaller() Installer {
-	return &FakerInstaller{}
 }
 
 func (this *FakerInstaller) Install(restC *restful.Container) {
@@ -70,10 +79,6 @@ func (this *FakerInstaller) Install(restC *restful.Container) {
 }
 
 type SwaggerInstaller struct {
-}
-
-func NewSwaggerInstaller() Installer {
-	return &SwaggerInstaller{}
 }
 
 func (this *SwaggerInstaller) Install(restC *restful.Container) {

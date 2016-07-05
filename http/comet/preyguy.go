@@ -16,7 +16,7 @@ type PreyGuy struct {
 }
 
 // if input is not null, prey guy will use post method, otherwise get
-func NewPreyGuy(url string, out io.Writer, input *io.LimitedReader) *PreyGuy {
+func NewPreyGuy(url string, out io.Writer, input *io.LimitedReader) (*PreyGuy, error) {
 
 	if _, ok := out.(http.Flusher); !ok {
 		glog.Warningln("prey guy got a non-flusher output.")
@@ -32,14 +32,14 @@ func NewPreyGuy(url string, out io.Writer, input *io.LimitedReader) *PreyGuy {
 	req, err := http.NewRequest(method, url, input)
 	if err != nil {
 		// the only error will be possiblly caused is url paring error
-		panic(err)
+		return nil, err
 	}
 	req.ContentLength = contentLen
 
 	return &PreyGuy{
 		Req: req,
 		Out: out,
-	}
+	}, nil
 }
 
 func (this *PreyGuy) Loop() error {

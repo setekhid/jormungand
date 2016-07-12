@@ -45,13 +45,32 @@ func (rtab *RTable) LinkTun(ipnet IPv4Net, uid uint32, tun interface{}) {
 	(*skiplist.SkipList)(rtab).Set(&ipnet, tuns)
 }
 
+func (rtab *RTable) LinkIP(ipId uint32, tun interface{}) {
+
+	rtab.LinkTun(IPv4Net{
+		IP:   IPv4(ipId),
+		Mask: 0x0,
+	}, ipId, tun)
+}
+
 func (rtab *RTable) DiscardTun(ipnet IPv4Net, uid uint32) {
 
 	if v, ok := (*skiplist.SkipList)(rtab).Get(&ipnet); ok {
 
 		tuns := v.(map[uint32]interface{})
 		delete(tuns, uid)
+		if len(tuns) <= 0 {
+			(*skiplist.SkipList)(rtab).Delete(&ipnet)
+		}
 	}
+}
+
+func (rtab *RTable) DiscardIP(ipId uint32) {
+
+	rtab.DiscardTun(IPv4Net{
+		IP:   IPv4(ipId),
+		Mask: 0x0,
+	}, ipId)
 }
 
 func (rtab *RTable) RouteIP(ip IPv4) map[uint32]interface{} {

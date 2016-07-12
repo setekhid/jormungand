@@ -4,7 +4,9 @@
 
 package jorm
 
-import ()
+import (
+	"sync/atomic"
+)
 
 const (
 	PKT_CACHE_COUNT = 128
@@ -48,29 +50,33 @@ func (l *Link) Close() error {
 
 // struct Link count refrence
 type LinkRef struct {
+	refC *int32
+
 	*Link
-	refC *int
+	canl func()
 }
 
-func NewLinkRef(l *Link) LinkRef {
+func (r *Router) refLink(l *Link, canl func()) LinkRef {
 
-	refC := 1
+	refC := int32(1)
 	return LinkRef{
-		Link: l,
 		refC: &refC,
+
+		Link: l,
+		canl: canl,
 	}
 }
 
 func (l LinkRef) Clone() LinkRef {
 
-	*(l.refC)++
+	atomic.AddInt32(l.refC, 1)
 	return l
 }
 
 func (l LinkRef) Close() error {
 
-	*(l.refC)--
-	if *(l.refC) <= 0 {
+	if atomic.AddInt32(l.refC, -1) <= 0 {
+		l.canl()
 		return l.Link.Close()
 	}
 	return nil

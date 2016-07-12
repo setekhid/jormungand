@@ -11,10 +11,15 @@ import (
 	"strconv"
 )
 
+const (
+	HTTP_DL_NORMAL_LEN = int64(60000)
+)
+
 type TunnelAuthor interface {
 	// if writable less than 0, the result will not limit output content length
 	// if readable less than 0, JungleMan will keep read tunnel untill EOF
-	Auth(token string, writable int64) (tunnel io.ReadWriteCloser, readable int64)
+	// err marking any error occured, the tunnel should be nil
+	Auth(token string, writable int64) (tunnel io.ReadWriteCloser, readable int64, err error)
 }
 
 type JungleMan struct {
@@ -36,8 +41,8 @@ func (this *JungleMan) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 	}
 
 	// authorize
-	tunnel, contentLen := this.Author.Auth(req.RequestURI, req.ContentLength)
-	if tunnel == nil { // didn't pass the auth
+	tunnel, contentLen, _ := this.Author.Auth(req.RequestURI, req.ContentLength)
+	if tunnel == nil { // didn't pass the auth, omit the error
 		return
 	}
 	defer tunnel.Close()

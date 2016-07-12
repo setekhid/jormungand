@@ -14,17 +14,26 @@ var (
 
 type ModuleEntry func()
 
+func Entries() map[string]ModuleEntry {
+
+	if entries == nil {
+		entries = map[string]ModuleEntry{}
+	}
+	return entries
+}
+
 func RunInMain(modules []string) {
+
 	for _, m := range modules {
-		entries[m]()
+		Entries()[m]()
 	}
 }
 
 func RegistEntry(module string, entry ModuleEntry) {
 
-	if _, ok := entries[module]; ok {
+	if _, ok := Entries()[module]; ok {
 		panic(errors.New("duplicated module entry " + module))
 	}
 
-	entries[module] = entry
+	Entries()[module] = entry
 }

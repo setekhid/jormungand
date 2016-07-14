@@ -4,7 +4,12 @@
 
 package main
 
-import ()
+import (
+	_ "github.com/setekhid/jormungand/jorm/sel"
+	_ "github.com/setekhid/jormungand/jorm/stor"
+	_ "github.com/setekhid/jormungand/jorm/tun"
+	_ "github.com/setekhid/jormungand/jorm/web"
+)
 
 func init() {
 

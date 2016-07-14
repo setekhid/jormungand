@@ -7,37 +7,86 @@ package jorm
 import (
 	"encoding/base64"
 	"encoding/binary"
+	"errors"
 	"github.com/setekhid/jormungand/http/comet"
 	"gopkg.in/mgo.v2/bson"
+	"hash/crc32"
 	"io"
+	"net/url"
+	"sync"
 )
 
 type Router struct {
+	acpt chan *AuthEvent
+	ulns map[uint32]LinkTuns
+
 	rtab *RTable
-	ulns map[uint32]LinkRef
 }
 
 func NewRouter() *Router {
 
 	return &Router{
+
+		acpt: make(chan *AuthEvent, 32),
+		ulns: map[uint32]LinkTuns{},
+
 		rtab: NewRTable(),
-		ulns: map[uint32]LinkRef{},
 	}
 }
 
-// Override comet.TunnelAuthor.Auth
-func (r *Router) Auth(tokStr string, inlen int64) (tun io.ReadWriteCloser, outlen int64, err error) {
+type AuthEvent struct {
+	Uri   string
+	InLen int64
 
-	// TODO
-	return nil, 0, nil
+	Done chan struct{}
+
+	Tun    io.ReadWriteCloser
+	OutLen int64
+	Err    error
 }
 
-func (r *Router) auth_unsafe(tokStr string, inlen int64) (tun io.ReadWriteCloser, outlen int64, err error) {
+var AuthEventPool = &sync.Pool{New: NewAuthEvent}
+
+func NewAuthEvent() interface{} { return &AuthEvent{Done: make(chan struct{})} }
+func FishAuthEvent() *AuthEvent { return AuthEventPool.Get().(*AuthEvent) }
+func (e *AuthEvent) Free()      { AuthEventPool.Put(e) }
+
+// Override comet.TunnelAuthor.Auth
+func (r *Router) Auth(uri string, inlen int64) (tun io.ReadWriteCloser, outlen int64, err error) {
+
+	event := FishAuthEvent()
+	defer event.Free()
+
+	event.Uri = uri
+	event.InLen = inlen
+	r.acpt <- event
+	<-event.Done
+
+	if event.Err != nil {
+		event.Tun = nil
+	}
+
+	return event.Tun, event.OutLen, event.Err
+}
+
+func (r *Router) Terminal() { close(r.acpt) }
+
+func (r *Router) route_unsafe(msg []byte) bool {
+
+	// TODO
+	return false
+}
+
+func (r *Router) auth_unsafe(uri string, inlen int64) (tun LinkTuns, outlen int64, err error) {
 
 	// account's token json
+	tokStr, err := r.cutTokenStr(uri)
+	if err != nil {
+		return tun, 0, err
+	}
 	tok, err := r.decodeToken(tokStr)
 	if err != nil {
-		return nil, 0, err
+		return tun, 0, err
 	}
 
 	// user link
@@ -47,7 +96,7 @@ func (r *Router) auth_unsafe(tokStr string, inlen int64) (tun io.ReadWriteCloser
 		// routeable v4 network
 		ipnets := r.parseIPNet(tok)
 		// reference a new link
-		uln := r.refLink(NewLink(), r.mkDereference(tok.AccountIP, ipnets))
+		uln := r.tunLink(NewLink(), ipnets)
 		r.ulns[tok.AccountIP] = uln
 		// regist self route
 		r.rtab.LinkIP(tok.AccountIP, uln.Link)
@@ -64,33 +113,14 @@ func (r *Router) auth_unsafe(tokStr string, inlen int64) (tun io.ReadWriteCloser
 	return uln, comet.HTTP_DL_NORMAL_LEN, nil
 }
 
-func (r *Router) Kickoff(ip uint32, ipnets []IPv4Net) {
+func (r *Router) cutTokenStr(uri string) (string, error) {
 
-	// TODO
-}
-
-func (r *Router) mkDereference(ip uint32, ipnets []IPv4Net) func() {
-
-	return func() {
-		r.Kickoff(ip, ipnets)
+	url, err := url.ParseRequestURI(uri)
+	if err != nil {
+		return "", err
 	}
-}
-
-func (r *Router) kickoff_unsafe(ip uint32, ipnets []IPv4Net) {
-
-	// discard ipv4 network routes
-	for _, ipnet := range ipnets {
-		r.rtab.DiscardTun(ipnet, ip)
-	}
-	// discard self route
-	r.rtab.DiscardIP(ip)
-	// discard link reference
-	delete(r.ulns, ip)
-}
-
-func (r *Router) Routing() {
-
-	// TODO
+	tok := url.Path[1:]
+	return tok, nil
 }
 
 type TokJson struct {
@@ -123,7 +153,10 @@ func (r *Router) decodeToken(tokStr string) (*TokJson, error) {
 	checksum := binary.BigEndian.Uint32(tokj[:4])
 	tokj = tokj[4:]
 
-	// TODO checksum
+	// crc32 checksum
+	if _checksum := crc32.ChecksumIEEE(tokj); _checksum != checksum {
+		return nil, errors.New("crc32 checksum doesn't match")
+	}
 
 	// account identify and checksum
 	tok := TokJson{

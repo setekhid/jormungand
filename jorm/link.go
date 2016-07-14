@@ -44,39 +44,36 @@ func (l *Link) Write(p []byte) (n int, err error) {
 // Override io.Closer.Close
 func (l *Link) Close() error {
 	close(l.Tx)
-	close(l.Rcv)
 	return nil
 }
 
 // struct Link count refrence
-type LinkRef struct {
+type LinkTuns struct {
 	refC *int32
 
 	*Link
-	canl func()
+	Nets []IPv4Net
 }
 
-func (r *Router) refLink(l *Link, canl func()) LinkRef {
+func (r *Router) tunLink(l *Link, nets []IPv4Net) LinkTuns {
 
 	refC := int32(1)
-	return LinkRef{
+	return LinkTuns{
 		refC: &refC,
-
 		Link: l,
-		canl: canl,
+		Nets: nets,
 	}
 }
 
-func (l LinkRef) Clone() LinkRef {
+func (l LinkTuns) Clone() LinkTuns {
 
 	atomic.AddInt32(l.refC, 1)
 	return l
 }
 
-func (l LinkRef) Close() error {
+func (l LinkTuns) Close() error {
 
 	if atomic.AddInt32(l.refC, -1) <= 0 {
-		l.canl()
 		return l.Link.Close()
 	}
 	return nil

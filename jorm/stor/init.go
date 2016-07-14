@@ -2,13 +2,11 @@
 // Use of this source code is governed by BSD 3-clause
 // license that can be found in the LICENSE file.
 
-package tun
+package stor
 
-import (
-	_ "github.com/setekhid/jormungand/tungo"
-)
+import ()
 
 func init() {
 
-	// TODO
+	(&RedisConf{}).RegistJargs()
 }

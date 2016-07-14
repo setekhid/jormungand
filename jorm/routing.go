@@ -8,8 +8,89 @@ import (
 	"bytes"
 	"golang.org/x/net/ipv4"
 	"io"
+	"reflect"
 	"sync"
 )
+
+func Routing(r *Router) {
+
+	// generate selecting cases
+	cases := make([]reflect.SelectCase, 0, len(r.ulns)+1)
+	// append acpt channel as the first
+	cases = append(cases, rHelper.selectRecv(r.acpt))
+	// append the rest tx channels
+	for _, ln := range r.ulns {
+		cases = append(cases, rHelper.txChanCase(ln.Link))
+	}
+
+	// selecting
+	for len(cases) > 0 {
+
+		chosen, recv, recvOK := reflect.Select(cases)
+
+		if !recvOK { // channel closed event
+
+			if chosen == 0 { // terminal notify
+				cases = nil
+				continue
+			}
+
+			// tx channel close
+			cases[chosen] = cases[len(cases)-1]
+			cases = cases[:len(cases)-1]
+			continue
+		}
+
+		if chosen == 0 { // accept request event
+
+			authE := recv.Interface().(*AuthEvent)
+			authE.Tun, authE.OutLen, authE.Err = r.auth_unsafe(authE.Uri, authE.InLen)
+
+			if authE.Err == nil { // add authE.Tun into selecting cases
+				cases = append(cases, rHelper.txChanCase(authE.Tun.(LinkTuns).Link))
+			}
+
+			authE.Done <- struct{}{}
+			continue
+		}
+
+		// receving message
+		msg := recv.Interface().([]byte)
+		r.route_unsafe(msg)
+		continue
+	}
+}
+
+type routingHelper struct{}
+
+var rHelper = routingHelper{}
+
+func (h routingHelper) txChanCase(l *Link) reflect.SelectCase {
+
+	return h.selectRecv(l.Puller())
+}
+
+func (_ routingHelper) selectRecv(recvCh interface{}) reflect.SelectCase {
+
+	return reflect.SelectCase{
+		Dir:  reflect.SelectRecv,
+		Chan: reflect.ValueOf(recvCh),
+	}
+}
+
+func (_ routingHelper) send2RcvChan(l *Link, msg []byte) bool {
+
+	var ok bool
+	select {
+	case l.Pusher() <- msg:
+		ok = true
+	default:
+		ok = false
+	}
+	return ok
+}
+
+// ==========================================================>
 
 // implement io.ReadWriteCloser
 type Tunnel struct {

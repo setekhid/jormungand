@@ -11,5 +11,5 @@ import (
 
 func init() {
 
-	jargs.RegistEntry(moduleName, func() { go jorm.Routing(Router()) })
+	jargs.RegistEntry(moduleName, func() { go jorm.Routing(Router(), rterm) })
 }

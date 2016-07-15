@@ -9,6 +9,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"github.com/setekhid/jormungand/http/comet"
+	"github.com/setekhid/jormungand/misc/edgo"
 	"gopkg.in/mgo.v2/bson"
 	"hash/crc32"
 	"io"
@@ -17,24 +18,42 @@ import (
 )
 
 type Router struct {
-	acpt chan *AuthEvent
-	ulns map[uint32]LinkTuns
+	txch chan []byte
 
+	evChan chan edgo.Event
+	evProc *edgo.EdGo
+
+	ulns map[uint32]LinkRef
 	rtab *RTable
 }
 
 func NewRouter() *Router {
 
-	return &Router{
+	router := &Router{
 
-		acpt: make(chan *AuthEvent, 32),
-		ulns: map[uint32]LinkTuns{},
+		txch: make(chan []byte, 10240),
 
+		ulns: map[uint32]LinkRef{},
 		rtab: NewRTable(),
 	}
+
+	evChan := make(chan edgo.Event, 32)
+	evProc := edgo.NewEdGo(router, evChan)
+	evProc.Regist(authEventType, authEventFunc)
+	evProc.Regist(closEventType, closEventFunc)
+
+	router.evChan = evChan
+	router.evProc = evProc
+
+	return router
 }
 
-type AuthEvent struct {
+const (
+	authEventType = 1
+	closEventType = 2
+)
+
+type authEvent struct {
 	Uri   string
 	InLen int64
 
@@ -45,31 +64,60 @@ type AuthEvent struct {
 	Err    error
 }
 
-var AuthEventPool = &sync.Pool{New: NewAuthEvent}
+var authEventPool = &sync.Pool{
+	New: func() interface{} { return &authEvent{Done: make(chan struct{})} },
+}
 
-func NewAuthEvent() interface{} { return &AuthEvent{Done: make(chan struct{})} }
-func FishAuthEvent() *AuthEvent { return AuthEventPool.Get().(*AuthEvent) }
-func (e *AuthEvent) Free()      { AuthEventPool.Put(e) }
+func fishAuthEvent() *authEvent { return authEventPool.Get().(*authEvent) }
+func (e *authEvent) free()      { authEventPool.Put(e) }
+
+// Override edgo.Event.Type()
+func (e *authEvent) Type() int { return authEventType }
+
+func authEventFunc(self interface{}, event edgo.Event) {
+
+	router := self.(*Router)
+	authE := event.(*authEvent)
+	authE.Tun, authE.OutLen, authE.Err = router.auth_unsafe(authE.Uri, authE.InLen)
+	authE.Done <- struct{}{}
+}
+
+type closEvent struct {
+	IpId uint32
+	Nets []IPv4Net
+}
+
+// Override edgo.Event.Type()
+func (e *closEvent) Type() int { return closEventType }
+
+func closEventFunc(self interface{}, event edgo.Event) {
+
+	router := self.(*Router)
+	closE := event.(*closEvent)
+	router.kick_unsafe(closE.IpId, closE.Nets)
+}
 
 // Override comet.TunnelAuthor.Auth
 func (r *Router) Auth(uri string, inlen int64) (tun io.ReadWriteCloser, outlen int64, err error) {
 
-	event := FishAuthEvent()
-	defer event.Free()
+	event := fishAuthEvent()
+	defer event.free()
 
 	event.Uri = uri
 	event.InLen = inlen
-	r.acpt <- event
+	r.evChan <- event
 	<-event.Done
-
-	if event.Err != nil {
-		event.Tun = nil
-	}
 
 	return event.Tun, event.OutLen, event.Err
 }
 
-func (r *Router) Terminal() { close(r.acpt) }
+func (r *Router) Kick(ipId uint32, nets []IPv4Net) {
+
+	r.evChan <- &closEvent{
+		IpId: ipId,
+		Nets: nets,
+	}
+}
 
 func (r *Router) route_unsafe(msg []byte) bool {
 
@@ -77,16 +125,16 @@ func (r *Router) route_unsafe(msg []byte) bool {
 	return false
 }
 
-func (r *Router) auth_unsafe(uri string, inlen int64) (tun LinkTuns, outlen int64, err error) {
+func (r *Router) auth_unsafe(uri string, inlen int64) (tun io.ReadWriteCloser, outlen int64, err error) {
 
 	// account's token json
 	tokStr, err := r.cutTokenStr(uri)
 	if err != nil {
-		return tun, 0, err
+		return nil, 0, err
 	}
 	tok, err := r.decodeToken(tokStr)
 	if err != nil {
-		return tun, 0, err
+		return nil, 0, err
 	}
 
 	// user link
@@ -96,13 +144,14 @@ func (r *Router) auth_unsafe(uri string, inlen int64) (tun LinkTuns, outlen int6
 		// routeable v4 network
 		ipnets := r.parseIPNet(tok)
 		// reference a new link
-		uln := r.tunLink(NewLink(), ipnets)
+		uln := r.registLink(NewLink(r.txch), tok.AccountIP, ipnets)
 		r.ulns[tok.AccountIP] = uln
+		lnPusher := uln.Link.Pusher()
 		// regist self route
-		r.rtab.LinkIP(tok.AccountIP, uln.Link)
+		r.rtab.LinkIP(tok.AccountIP, lnPusher)
 		// regist ipv4 network routes
 		for _, ipnet := range ipnets {
-			r.rtab.LinkTun(ipnet, tok.AccountIP, uln.Link)
+			r.rtab.LinkTun(ipnet, tok.AccountIP, lnPusher)
 		}
 	} else {
 
@@ -111,6 +160,21 @@ func (r *Router) auth_unsafe(uri string, inlen int64) (tun LinkTuns, outlen int6
 	}
 
 	return uln, comet.HTTP_DL_NORMAL_LEN, nil
+}
+
+func (r *Router) kick_unsafe(ipId uint32, nets []IPv4Net) {
+
+	uln := r.ulns[ipId]
+
+	if uln.NoRef() {
+
+		for _, ipnet := range nets {
+			r.rtab.DiscardTun(ipnet, ipId)
+		}
+		r.rtab.DiscardIP(ipId)
+		delete(r.ulns, ipId)
+		uln.Link.Close()
+	}
 }
 
 func (r *Router) cutTokenStr(uri string) (string, error) {

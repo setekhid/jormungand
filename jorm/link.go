@@ -14,14 +14,14 @@ const (
 
 type Link struct {
 	Rcv chan []byte
-	Tx  chan []byte
+	Tx  chan<- []byte
 }
 
-func NewLink() *Link {
+func NewLink(tx chan<- []byte) *Link {
 
 	return &Link{
 		Rcv: make(chan []byte, PKT_CACHE_COUNT),
-		Tx:  make(chan []byte, PKT_CACHE_COUNT),
+		Tx:  tx,
 	}
 }
 
@@ -33,8 +33,6 @@ func (l *Link) Read(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func (l *Link) Puller() <-chan []byte { return l.Tx }
-
 // Override io.Writer.Write
 func (l *Link) Write(p []byte) (n int, err error) {
 	l.Tx <- p
@@ -43,8 +41,9 @@ func (l *Link) Write(p []byte) (n int, err error) {
 
 // Override io.Closer.Close
 func (l *Link) Close() error {
-	close(l.Tx)
-	close(l.Rcv)
+
+	l.Rcv = nil
+	l.Tx = nil
 	return nil
 }
 
@@ -52,18 +51,25 @@ func (l *Link) Close() error {
 type LinkRef struct {
 	refC *int32
 
+	r    *Router
+	ipId uint32
+	nets []IPv4Net
+
 	*Link
-	canl func()
 }
 
-func (r *Router) refLink(l *Link, canl func()) LinkRef {
+func (r *Router) registLink(l *Link, ipId uint32, nets []IPv4Net) LinkRef {
 
 	refC := int32(1)
 	return LinkRef{
+
 		refC: &refC,
 
+		r:    r,
+		ipId: ipId,
+		nets: nets,
+
 		Link: l,
-		canl: canl,
 	}
 }
 
@@ -73,11 +79,12 @@ func (l LinkRef) Clone() LinkRef {
 	return l
 }
 
+func (l LinkRef) NoRef() bool { return atomic.LoadInt32(l.refC) <= 0 }
+
 func (l LinkRef) Close() error {
 
 	if atomic.AddInt32(l.refC, -1) <= 0 {
-		l.canl()
-		return l.Link.Close()
+		l.r.Kick(l.ipId, l.nets) // notify the router style gc
 	}
 	return nil
 }

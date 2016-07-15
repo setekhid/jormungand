@@ -14,6 +14,7 @@ const (
 
 var (
 	router = (*jorm.Router)(nil)
+	rterm  = make(chan struct{}, 8)
 )
 
 func Router() *jorm.Router {
@@ -24,3 +25,5 @@ func Router() *jorm.Router {
 	}
 	return router
 }
+
+func StopSel() { close(rterm) }

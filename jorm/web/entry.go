@@ -36,8 +36,6 @@ func Entry() *EntryServ {
 	return entry
 }
 
-func loopInWebServing() { Entry().ListenAndServe() }
-
 type EntryConfig struct {
 	Addr string `json:"addr"`
 }

@@ -11,6 +11,39 @@ import (
 	"sync"
 )
 
+func Routing(r *Router, term <-chan struct{}) {
+
+	for true {
+
+		select {
+		case msg := <-r.txch:
+			r.route_unsafe(msg)
+		case ev := <-r.evChan:
+			r.evProc.Process(ev)
+		case <-term:
+			break
+		}
+	}
+}
+
+type routingHelper struct{}
+
+var rHelper = routingHelper{}
+
+func (_ routingHelper) send2RcvChan(pusher chan<- []byte, msg []byte) bool {
+
+	var ok bool
+	select {
+	case pusher <- msg:
+		ok = true
+	default:
+		ok = false
+	}
+	return ok
+}
+
+// ==========================================================>
+
 // implement io.ReadWriteCloser
 type Tunnel struct {
 

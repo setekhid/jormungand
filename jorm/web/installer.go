@@ -8,6 +8,7 @@ import (
 	"github.com/emicklei/go-restful"
 	"github.com/emicklei/go-restful/swagger"
 	"github.com/setekhid/jormungand/http/comet"
+	"github.com/setekhid/jormungand/jorm/sel"
 )
 
 var (
@@ -15,6 +16,7 @@ var (
 
 	installers = []Installer{
 		&VeryInstaller{},
+		&ManagerInstaller{},
 		&FakerInstaller{},
 		&SwaggerInstaller{},
 	}
@@ -23,19 +25,16 @@ var (
 func Installers() []Installer {
 
 	if jman == nil {
-		panic("web installers need a JungleMan, but got nil")
+		jman = &comet.JungleMan{Author: sel.Router()}
 	}
 	return installers
-}
-
-func RegistTunnelAuthor(author comet.TunnelAuthor) {
-	jman = &comet.JungleMan{Author: author}
 }
 
 type VeryInstaller struct {
 }
 
-func (this *VeryInstaller) Install(restC *restful.Container) {
+// installing exchange and download api, for vpn
+func (ins *VeryInstaller) Install(restC *restful.Container) {
 
 	ws := new(restful.WebService)
 	ws.
@@ -44,13 +43,13 @@ func (this *VeryInstaller) Install(restC *restful.Container) {
 		Produces(restful.MIME_OCTET)
 
 	ws.Route(
-		ws.POST("/xch/{dumpFile}").To(this.exchange).
+		ws.POST("/xch/{dumpFile}").To(ins.exchange).
 			Doc("exchange a file with server").
 			Operation("exchange").
 			Param(ws.PathParameter("dumpFile", "file name").DataType("string")))
 
 	ws.Route(
-		ws.GET("/dl/{dumpFile}").To(this.download).
+		ws.GET("/dl/{dumpFile}").To(ins.download).
 			Doc("download a file from server").
 			Operation("download").
 			Param(ws.PathParameter("dumpFile", "file name").DataType("string")))
@@ -58,13 +57,15 @@ func (this *VeryInstaller) Install(restC *restful.Container) {
 	restC.Add(ws)
 }
 
-func (this *VeryInstaller) exchange(_req *restful.Request, _resp *restful.Response) {
+// exchange api
+func (ins *VeryInstaller) exchange(_req *restful.Request, _resp *restful.Response) {
 	token := _req.PathParameter("dumpFile")
 	_ = token
 	jman.ServeHTTP(_resp.ResponseWriter, _req.Request)
 }
 
-func (this *VeryInstaller) download(_req *restful.Request, _resp *restful.Response) {
+// download api
+func (ins *VeryInstaller) download(_req *restful.Request, _resp *restful.Response) {
 	token := _req.PathParameter("dumpFile")
 	_ = token
 	jman.ServeHTTP(_resp.ResponseWriter, _req.Request)
@@ -73,7 +74,8 @@ func (this *VeryInstaller) download(_req *restful.Request, _resp *restful.Respon
 type FakerInstaller struct {
 }
 
-func (this *FakerInstaller) Install(restC *restful.Container) {
+// a fake installer
+func (ins *FakerInstaller) Install(restC *restful.Container) {
 
 	// TODO
 }
@@ -81,7 +83,8 @@ func (this *FakerInstaller) Install(restC *restful.Container) {
 type SwaggerInstaller struct {
 }
 
-func (this *SwaggerInstaller) Install(restC *restful.Container) {
+// swagger
+func (ins *SwaggerInstaller) Install(restC *restful.Container) {
 	swagger.RegisterSwaggerService(swagger.Config{
 		WebServices: restC.RegisteredWebServices(),
 		ApiPath:     "/apidocs.json",

@@ -5,12 +5,11 @@
 package sel
 
 import (
-	"github.com/setekhid/jormungand/jorm/web"
+	"github.com/setekhid/jormungand/jorm"
 	"github.com/setekhid/jormungand/misc/jargs"
 )
 
 func init() {
 
-	web.RegistTunnelAuthor(Router())
-	jargs.RegistEntry(moduleName, func() { go Router().Routing() })
+	jargs.RegistEntry(moduleName, func() { go jorm.Routing(Router(), rterm) })
 }

@@ -21,7 +21,7 @@ func Router() *jorm.Router {
 
 	if router == nil {
 
-		router = jorm.NewRouter()
+		router = jorm.NewRouter(jorm.FishPoolInst())
 	}
 	return router
 }

@@ -1,0 +1,19 @@
+packetdiag {
+
+  colwidth   = 64
+  node_width = 8
+
+  0-31:    Account IP
+  32-95:   IV
+  96-127:  Checksum
+  128-191: IV Rcv
+  192-255: IV Tx
+  256-319: Rand
+  320-351: Masks
+  352-383: Route1 (optional)
+  384-415: Route2 (optional)
+  416-447: Route3 (optional)
+  448-479: Route4 (optional)
+  480-575: Message1
+  576-695: Message2
+}

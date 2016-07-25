@@ -233,7 +233,10 @@ func (r *Router) decodeToken(tokStr string) (*RoutingInfo, error) {
 	tokj = tokj[8:]
 
 	// decrypt tokj
-	fishKey := r.pool.Fish(ipId)
+	fishKey, fishKeyExists := r.pool.Fish(ipId)
+	if !fishKeyExists {
+		return nil, errors.New("IpId doesn't registered")
+	}
 	fish, err := blowfish.NewCipher(fishKey)
 	if err != nil {
 		panic(err) // should not be here

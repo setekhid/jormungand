@@ -8,5 +8,5 @@ import ()
 
 func init() {
 
-	(&RedisConf{}).RegistJargs()
+	(&StorConf{}).RegistJargs()
 }

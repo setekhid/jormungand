@@ -10,6 +10,7 @@ import (
 	"github.com/setekhid/jormungand/jorm/stor"
 	"golang.org/x/crypto/blowfish"
 	"math/rand"
+	"time"
 )
 
 func BlowfCap(len int) int {
@@ -130,27 +131,39 @@ func (bf *Blowf) DecS(pkt []byte, iv []byte, ci []byte) []byte {
 // ============================= deprecated above
 
 type FishPool struct {
-	fishes  map[uint32][]byte
+	fishes  map[uint32]stor.BfKeyInfo
 	storage stor.BlowStor
 }
 
 func NewFishPool(storage stor.BlowStor) *FishPool {
 
 	return &FishPool{
-		fishes:  map[uint32][]byte{},
+		fishes:  map[uint32]stor.BfKeyInfo{},
 		storage: storage,
 	}
 }
 
-func (pool *FishPool) Fish(ipId uint32) []byte {
+func (pool *FishPool) Fish(ipId uint32) ([]byte, bool) {
+
+	now := time.Now().Unix()
 
 	if fish, ok := pool.fishes[ipId]; ok {
-		return fish
+
+		if fish.TTL >= now {
+			return fish.Key, true
+		} else {
+			delete(pool.fishes, ipId)
+		}
 	}
 
-	fish := pool.storage.ReadBfKey(ipId)
-	pool.fishes[ipId] = fish
-	return fish
+	if fish, ok := pool.storage.ReadBfKey(ipId); ok {
+
+		fish.TTL += now
+		pool.fishes[ipId] = fish
+		return fish.Key, true
+	}
+
+	return nil, false
 }
 
 var (

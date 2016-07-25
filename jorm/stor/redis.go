@@ -5,29 +5,52 @@
 package stor
 
 import (
-	"github.com/setekhid/jormungand/misc/jargs"
+	"github.com/garyburd/redigo/redis"
+	"strconv"
 )
 
 type RedisStor struct {
+	Conn     redis.Conn
+	DBPrefix string
 }
 
 type RedisConf struct {
+	Network  string
+	Address  string
+	DBPrefix string
 }
 
-func (conf *RedisConf) RegistJargs() { jargs.Regist(moduleName, conf) }
+func NewRedisStor(conf *RedisConf) (*RedisStor, error) {
 
-func NewRedisStor(conf *RedisConf) *RedisStor {
+	conn, err := redis.Dial(conf.Network, conf.Address)
+	if err != nil {
+		return nil, err
+	}
 
-	return &RedisStor{}
+	return &RedisStor{
+		Conn:     conn,
+		DBPrefix: conf.DBPrefix + ":",
+	}, nil
 }
 
-func (db *RedisStor) ReadBfKey(ipId uint32) []byte {
+// Override io.Closer.Close
+func (db *RedisStor) Close() error { return db.Conn.Close() }
 
-	// TODO
-	return nil
-}
+func (db *RedisStor) dbKey(key string) string { return db.DBPrefix + key }
 
-func (db *RedisStor) WriteBfKey(ipId uint32, key []byte) {
+func (db *RedisStor) ReadBfKey(ipId uint32) (BfKeyInfo, bool) {
 
-	// TODO
+	kinfo := BfKeyInfo{}
+
+	vals, err := redis.Values(db.Conn.Do("HMGET", db.dbKey("bf_keys:"+strconv.FormatUint(uint64(ipId), 16)), "key", "ttl"))
+	if err != nil {
+		return kinfo, false
+	}
+
+	_, err = redis.Scan(vals, &kinfo.Key, &kinfo.TTL)
+	if err != nil {
+		return kinfo, false
+	}
+
+	return kinfo, true
 }

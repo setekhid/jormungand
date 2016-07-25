@@ -6,6 +6,8 @@ package jorm
 
 import (
 	"bytes"
+	"errors"
+	"github.com/setekhid/jormungand/jorm/payload"
 	"golang.org/x/net/ipv4"
 	"io"
 	"sync"
@@ -41,6 +43,53 @@ func (_ routingHelper) send2RcvChan(pusher chan<- []byte, msg []byte) bool {
 		ok = false
 	}
 	return ok
+}
+
+type RoutingCacher map[payload.HeaderInfo]uint32
+
+func NewRoutingCacher() RoutingCacher { return RoutingCacher{} }
+
+func (cach RoutingCacher) SeekGW(hdr payload.HeaderInfo) (uint32, bool) {
+	gwId, ok := cach[hdr]
+	return gwId, ok
+}
+
+func (cach RoutingCacher) RemoveGW(hdr payload.HeaderInfo)             { delete(cach, hdr) }
+func (cach RoutingCacher) CacheGW(hdr payload.HeaderInfo, gwId uint32) { cach[hdr] = gwId }
+
+type RoutingConns struct {
+	rtab *RTable
+	cach RoutingCacher
+}
+
+func (conn RoutingConns) Routing(hdr payload.HeaderInfo) (interface{}, bool) {
+
+	// this routing line is available
+	lnks, lnksExists := conn.rtab.RouteIP(IPv4(hdr.DstIP))
+	if !lnksExists || len(lnks) <= 0 {
+		conn.cach.RemoveGW(hdr)
+		return nil, false
+	}
+
+	// check the cache
+	if gwId, ok := conn.cach.SeekGW(hdr); ok {
+		if lnk, ok := lnks[gwId]; ok {
+			return lnk, true
+		}
+	}
+
+	// hasn't cached yet
+	gwId, lnk := conn.randGwMap(lnks)
+	conn.cach.CacheGW(hdr, gwId)
+	return lnk, true
+}
+
+func (_ RoutingConns) randGwMap(gws map[uint32]interface{}) (uint32, interface{}) {
+
+	for k, v := range gws {
+		return k, v
+	}
+	panic(errors.New("gws is empty"))
 }
 
 // ==========================================================>

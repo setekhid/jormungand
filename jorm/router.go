@@ -32,8 +32,9 @@ type Router struct {
 	evChan chan edgo.Event
 	evProc *edgo.EdGo
 
-	ulns map[uint32]refc.CountCloser
-	rtab *RTable
+	ulns  map[uint32]refc.CountCloser
+	rtab  *RTable
+	rcach RoutingCacher
 
 	pool *FishPool
 }
@@ -44,8 +45,9 @@ func NewRouter(pool *FishPool) *Router {
 
 		txch: make(chan []byte, HUB_CACHE_COUNT),
 
-		ulns: map[uint32]refc.CountCloser{},
-		rtab: NewRTable(),
+		ulns:  map[uint32]refc.CountCloser{},
+		rtab:  NewRTable(),
+		rcach: NewRoutingCacher(),
 
 		pool: pool,
 	}
@@ -140,7 +142,11 @@ func (r *Router) Kick(ipId uint32, nets []IPv4Net) {
 
 func (r *Router) route_unsafe(msg []byte) bool {
 
-	// TODO
+	hdr := r.Payload.HeaderInfo(msg)
+	if tun, ok := (RoutingConns{r.rtab, r.rcach}).Routing(hdr); ok {
+		tun.(chan<- []byte) <- msg
+		return true
+	}
 	return false
 }
 

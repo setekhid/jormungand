@@ -18,9 +18,21 @@ var (
 )
 
 type Config struct {
-	Payload     string          `json:"payload"`
+	Payload string `json:"payload"`
+	Mtu     uint16 `json:"mtu"`
+
 	payloadInst payload.Payload `json:"-"`
-	Mtu         uint16          `json:"mtu"`
+}
+
+func (c *Config) fillEmpty() *Config {
+
+	if len(c.Payload) <= 0 {
+		c.Payload = "tunip"
+	}
+	if c.Mtu <= 0 {
+		c.Mtu = 1500
+	}
+	return c
 }
 
 func (c *Config) payload() payload.Payload {
@@ -31,4 +43,4 @@ func (c *Config) payload() payload.Payload {
 	return c.payloadInst
 }
 
-func Conf() *Config { return jargs.Module(moduleName).(*Config) }
+func Conf() *Config { return jargs.Module(moduleName).(*Config).fillEmpty() }

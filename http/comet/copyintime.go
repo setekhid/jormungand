@@ -19,7 +19,7 @@ func CopyInTime(dst io.Writer, src io.Reader) (int64, error) {
 		}
 	}
 
-	// copied from golang
+	// copied from golang io.Copy
 	written := int64(0)
 	err := error(nil)
 

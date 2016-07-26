@@ -6,6 +6,8 @@ package jorm
 
 import (
 	"bytes"
+	"errors"
+	"github.com/setekhid/jormungand/jorm/payload"
 	"golang.org/x/net/ipv4"
 	"io"
 	"sync"
@@ -16,10 +18,11 @@ func Routing(r *Router, term <-chan struct{}) {
 	for true {
 
 		select {
-		case msg := <-r.txch:
+		case msg := <-r.txch: // routing packet or message
 			r.route_unsafe(msg)
-		case ev := <-r.evChan:
+		case ev := <-r.evChan: // processing router event
 			r.evProc.Process(ev)
+
 		case <-term:
 			break
 		}
@@ -40,6 +43,53 @@ func (_ routingHelper) send2RcvChan(pusher chan<- []byte, msg []byte) bool {
 		ok = false
 	}
 	return ok
+}
+
+type RoutingCacher map[payload.HeaderInfo]uint32
+
+func NewRoutingCacher() RoutingCacher { return RoutingCacher{} }
+
+func (cach RoutingCacher) SeekGW(hdr payload.HeaderInfo) (uint32, bool) {
+	gwId, ok := cach[hdr]
+	return gwId, ok
+}
+
+func (cach RoutingCacher) RemoveGW(hdr payload.HeaderInfo)             { delete(cach, hdr) }
+func (cach RoutingCacher) CacheGW(hdr payload.HeaderInfo, gwId uint32) { cach[hdr] = gwId }
+
+type RoutingConns struct {
+	rtab *RTable
+	cach RoutingCacher
+}
+
+func (conn RoutingConns) Routing(hdr payload.HeaderInfo) (interface{}, bool) {
+
+	// this routing line is available
+	lnks, lnksExists := conn.rtab.RouteIP(IPv4(hdr.DstIP))
+	if !lnksExists || len(lnks) <= 0 {
+		conn.cach.RemoveGW(hdr)
+		return nil, false
+	}
+
+	// check the cache
+	if gwId, ok := conn.cach.SeekGW(hdr); ok {
+		if lnk, ok := lnks[gwId]; ok {
+			return lnk, true
+		}
+	}
+
+	// hasn't cached yet
+	gwId, lnk := conn.randGwMap(lnks)
+	conn.cach.CacheGW(hdr, gwId)
+	return lnk, true
+}
+
+func (_ RoutingConns) randGwMap(gws map[uint32]interface{}) (uint32, interface{}) {
+
+	for k, v := range gws {
+		return k, v
+	}
+	panic(errors.New("gws is empty"))
 }
 
 // ==========================================================>
@@ -148,7 +198,7 @@ func (this *Tunnel) Close() error {
 type IPv4Tunnel struct {
 	Tunnel
 
-	Blower *BlowGuy
+	//Blower *BlowGuy
 	BlowId uint32
 
 	FragPacket []byte
@@ -156,18 +206,18 @@ type IPv4Tunnel struct {
 	FragLength int
 }
 
-func NewIPv4Tunnel(pollable, pushable int64, mtu int, blower *BlowGuy, blowId uint32) *IPv4Tunnel {
+func NewIPv4Tunnel(pollable, pushable int64, mtu int, blower *int, blowId uint32) *IPv4Tunnel {
 
 	this := &IPv4Tunnel{}
 	this.initialize(pollable, pushable, mtu, blower, blowId)
 	return this
 }
 
-func (this *IPv4Tunnel) initialize(pollable, pushable int64, mtu int, blower *BlowGuy, blowId uint32) {
+func (this *IPv4Tunnel) initialize(pollable, pushable int64, mtu int, blower *int, blowId uint32) {
 
 	this.Tunnel.initialize(pollable, pushable)
 
-	this.Blower = blower
+	//this.Blower = blower
 	this.BlowId = blowId
 	this.FragPacket = make([]byte, mtu)
 	this.IPv4Header = nil
@@ -179,10 +229,10 @@ func (this *IPv4Tunnel) cacheFragment() {
 	// not long enough, try to poll
 	copied := this.PollBytes(this.FragPacket[this.FragLength:])
 	// decode
-	decodeBegin := this.Blower.BlockFloor(this.FragLength)
+	//decodeBegin := this.Blower.BlockFloor(this.FragLength)
 	this.FragLength += copied
-	decodeEnd := this.Blower.BlockFloor(this.FragLength)
-	this.Blower.Decrypt(this.BlowId, this.FragPacket[decodeBegin:decodeEnd]) // TODO combine xor the previous block
+	//decodeEnd := this.Blower.BlockFloor(this.FragLength)
+	//this.Blower.Decrypt(this.BlowId, this.FragPacket[decodeBegin:decodeEnd]) // TODO combine xor the previous block
 }
 
 func (this *IPv4Tunnel) PollPacket(p []byte) (int, *ipv4.Header) {
@@ -190,13 +240,13 @@ func (this *IPv4Tunnel) PollPacket(p []byte) (int, *ipv4.Header) {
 	if this.IPv4Header == nil { // parse ipv4 header
 
 		// completing ipv4 header
-		if this.FragLength < this.Blower.BlockCeil(ipv4.HeaderLen) {
-			this.cacheFragment()
-		}
-		if this.FragLength < this.Blower.BlockCeil(ipv4.HeaderLen) {
-			// this time, we have nothing to do
-			return 0, nil
-		}
+		//if this.FragLength < this.Blower.BlockCeil(ipv4.HeaderLen) {
+		//	this.cacheFragment()
+		//}
+		//if this.FragLength < this.Blower.BlockCeil(ipv4.HeaderLen) {
+		// this time, we have nothing to do
+		//	return 0, nil
+		//}
 
 		// parse ipv4 header
 		header, err := ipv4.ParseHeader(this.FragPacket)
@@ -214,19 +264,19 @@ func (this *IPv4Tunnel) PollPacket(p []byte) (int, *ipv4.Header) {
 	}
 
 	// we got a header, now cache packet to its length
-	if this.FragLength < this.Blower.BlockCeil(this.IPv4Header.TotalLen) {
-		this.cacheFragment()
-	}
-	if this.FragLength < this.Blower.BlockCeil(this.IPv4Header.TotalLen) {
-		// this time, we have nothing to do
-		return 0, nil
-	}
+	//if this.FragLength < this.Blower.BlockCeil(this.IPv4Header.TotalLen) {
+	//	this.cacheFragment()
+	//}
+	//if this.FragLength < this.Blower.BlockCeil(this.IPv4Header.TotalLen) {
+	// this time, we have nothing to do
+	//	return 0, nil
+	//}
 
 	// now we got a whole packet
 	copied := copy(p, this.FragPacket[:this.IPv4Header.TotalLen])
 	header := this.IPv4Header
 	// clean cache
-	this.FragLength = copy(this.FragPacket, this.FragPacket[this.Blower.BlockCeil(this.IPv4Header.TotalLen):0])
+	//this.FragLength = copy(this.FragPacket, this.FragPacket[this.Blower.BlockCeil(this.IPv4Header.TotalLen):0])
 	this.IPv4Header = nil
 
 	return copied, header

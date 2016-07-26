@@ -2,11 +2,12 @@
 // Use of this source code is governed by BSD 3-clause
 // license that can be found in the LICENSE file.
 
-package stor
+package jorm
 
-import ()
+import (
+	"github.com/setekhid/jormungand/misc/jargs"
+)
 
 func init() {
-
-	(&StorConf{}).RegistJargs()
+	jargs.Regist(moduleName, &Config{})
 }

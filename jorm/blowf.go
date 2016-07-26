@@ -7,58 +7,21 @@ package jorm
 import (
 	"crypto/cipher"
 	"encoding/binary"
-	"github.com/golang/glog"
 	"github.com/setekhid/jormungand/jorm/stor"
 	"golang.org/x/crypto/blowfish"
-	"math"
 	"math/rand"
+	"time"
 )
 
-type BlowGuy struct {
-	keys map[uint32][]byte
-}
+func BlowfCap(len int) int {
 
-func NewBlowGuy() *BlowGuy {
-
-	return &BlowGuy{
-		keys: map[uint32][]byte{},
+	if len%blowfish.BlockSize == 0 {
+		return len
 	}
+	// return (len / blowfish.BlockSize + 1) * blowfish.BlockSize
+	// blowfish.BlockSize == 8
+	return (len | (blowfish.BlockSize - 1)) + 1
 }
-
-func (this *BlowGuy) Encrypt(id uint32, pkt []byte) {
-
-	// TODO
-}
-
-func (this *BlowGuy) Decrypt(id uint32, pkt []byte) {
-
-	// TODO
-}
-
-func (this *BlowGuy) Checksum(pkt []byte) uint32 {
-
-	// TODO
-	return 0
-}
-
-func (this *BlowGuy) BlockCeil(len int) int {
-	return int(math.Ceil(float64(len)/8.0) * 8.0)
-}
-
-func (this *BlowGuy) BlockFloor(len int) int {
-	return int(math.Floor(float64(len)/8.0) * 8.0)
-}
-
-func (this *BlowGuy) RegKey(id uint32, key []byte) {
-
-	if _, exists := this.keys[id]; exists {
-		glog.Warningln("blow guy already knew this id ", id)
-	}
-
-	this.keys[id] = key
-}
-
-//==============================================================>
 
 type Blowf blowfish.Cipher
 
@@ -86,75 +49,131 @@ func (bf *Blowf) IV(pktTail []byte) {
 	copy(pktTail, iv)
 }
 
+func (bf *Blowf) FillCap(pkt []byte) []byte {
+
+	riv := make([]byte, BlowfCap(len(pkt))-len(pkt))
+	bf.IV(riv)
+	return append(pkt, riv...)
+}
+
 func (bf *Blowf) IVSiz(pktLen int) int {
 
 	return blowfish.BlockSize - (pktLen % blowfish.BlockSize)
 }
 
-func (bf *Blowf) Enc(pkt []byte) []byte {
+func (bf *Blowf) SplitIV(pkt []byte) (iv []byte, rst []byte) {
+
+	iv = make([]byte, blowfish.BlockSize)
+	bf.IV(iv)
+
+	pktLen := len(pkt)
+	rstLen := pktLen - (pktLen % blowfish.BlockSize)
+	copy(iv, pkt[rstLen:])
+	rst = pkt[:rstLen]
+	return iv, rst
+}
+
+func (bf *Blowf) CombiIV(iv []byte, rst []byte) []byte { return append(rst, iv...) }
+
+func (bf *Blowf) Enc(iv []byte, rst []byte) []byte {
 
 	c := (*blowfish.Cipher)(bf)
 
-	pktLen := len(pkt)
-	rstLen := pktLen - blowfish.BlockSize
-	code := make([]byte, pktLen)
+	code := make([]byte, blowfish.BlockSize+len(rst))
 
-	// encrypting rest packet
-	cipher.NewCBCEncrypter(c, pkt[rstLen:]).CryptBlocks(code[:rstLen], pkt[:rstLen])
 	// encrypting iv field
-	c.Encrypt(code[rstLen:], pkt[rstLen:])
+	c.Encrypt(code[:blowfish.BlockSize], iv)
+	// encrypting rest packet
+	cipher.NewCBCEncrypter(c, code[:blowfish.BlockSize]).CryptBlocks(code[blowfish.BlockSize:], rst)
 
 	return code
 }
 
-func (bf *Blowf) Dec(pkt []byte) []byte {
+func (bf *Blowf) EncS(ci []byte, iv []byte, pkt []byte) []byte {
 
 	c := (*blowfish.Cipher)(bf)
 
-	pktLen := len(pkt)
-	rstLen := pktLen - blowfish.BlockSize
-	plain := make([]byte, pktLen)
+	cipher.NewCBCEncrypter(c, iv).CryptBlocks(ci, pkt)
 
-	// decrypting iv field
-	c.Decrypt(plain[rstLen:], pkt[rstLen:])
-	// decrypting rest packet
-	cipher.NewCBCDecrypter(c, plain[rstLen:]).CryptBlocks(plain[:rstLen], pkt[:rstLen])
+	niv := make([]byte, blowfish.BlockSize)
+	copy(niv, ci[len(ci)-blowfish.BlockSize:])
 
-	return plain
+	return niv
 }
 
-type BlowPool struct {
-	fishes  map[uint32]*Blowf
+func (bf *Blowf) Dec(pkt []byte) (iv []byte, rst []byte) {
+
+	c := (*blowfish.Cipher)(bf)
+
+	iv = make([]byte, blowfish.BlockSize)
+	rst = make([]byte, len(pkt)-blowfish.BlockSize)
+
+	// decrypting rest packet
+	cipher.NewCBCDecrypter(c, pkt[:blowfish.BlockSize]).CryptBlocks(rst, pkt[blowfish.BlockSize:])
+	// decrypting iv field
+	c.Decrypt(iv, pkt[:blowfish.BlockSize])
+
+	return iv, rst
+}
+
+func (bf *Blowf) DecS(pkt []byte, iv []byte, ci []byte) []byte {
+
+	c := (*blowfish.Cipher)(bf)
+
+	niv := make([]byte, blowfish.BlockSize)
+	copy(niv, ci[len(ci)-blowfish.BlockSize:])
+
+	cipher.NewCBCDecrypter(c, iv).CryptBlocks(pkt, ci)
+
+	return niv
+}
+
+// ============================= deprecated above
+
+type FishPool struct {
+	fishes  map[uint32]stor.BfKeyInfo
 	storage stor.BlowStor
 }
 
-func NewBlowPool(storage stor.BlowStor) *BlowPool {
+func NewFishPool(storage stor.BlowStor) *FishPool {
 
-	return &BlowPool{
-		fishes:  map[uint32]*Blowf{},
+	return &FishPool{
+		fishes:  map[uint32]stor.BfKeyInfo{},
 		storage: storage,
 	}
 }
 
-func (pool *BlowPool) Fish(ipId uint32) *Blowf {
+func (pool *FishPool) Fish(ipId uint32) ([]byte, bool) {
+
+	now := time.Now().Unix()
 
 	if fish, ok := pool.fishes[ipId]; ok {
-		return fish
+
+		if fish.TTL >= now {
+			return fish.Key, true
+		} else {
+			delete(pool.fishes, ipId)
+		}
 	}
 
-	fish := NewBlowf(pool.storage.ReadBfKey(ipId))
-	pool.fishes[ipId] = fish
-	return fish
+	if fish, ok := pool.storage.ReadBfKey(ipId); ok {
+
+		fish.TTL += now
+		pool.fishes[ipId] = fish
+		return fish.Key, true
+	}
+
+	return nil, false
 }
 
 var (
-	fishPool = (*BlowPool)(nil)
+	fishPool = (*FishPool)(nil)
 )
 
-func FishPool() *BlowPool {
+func FishPoolInst() *FishPool {
 
 	if fishPool == nil {
-		fishPool = NewBlowPool(stor.DB())
+		fishPool = NewFishPool(stor.DB())
 	}
 	return fishPool
 }

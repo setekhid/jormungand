@@ -5,86 +5,177 @@
 package jorm
 
 import (
-	"sync/atomic"
+	"crypto/cipher"
+	"github.com/setekhid/jormungand/jorm/payload"
+	"github.com/setekhid/jormungand/misc/refc"
+	_ "golang.org/x/net/ipv4"
+	"io"
 )
 
 const (
 	PKT_CACHE_COUNT = 128
 )
 
-type Link struct {
-	Rcv chan []byte
-	Tx  chan<- []byte
+type Network struct {
+	Mtu     uint16
+	Hub     chan<- []byte
+	Payload payload.Payload
 }
 
-func NewLink(tx chan<- []byte) *Link {
+type Link struct {
+	Rcv     chan []byte
+	Tx      chan<- []byte
+	Mtu     uint16
+	Payload payload.Payload
+}
 
-	return &Link{
-		Rcv: make(chan []byte, PKT_CACHE_COUNT),
-		Tx:  tx,
-	}
+func (l *Link) init(net *Network) {
+
+	l.Rcv = make(chan []byte, PKT_CACHE_COUNT)
+	l.Tx = net.Hub
+	l.Mtu = net.Mtu
+	l.Payload = net.Payload
 }
 
 func (l *Link) Pusher() chan<- []byte { return l.Rcv }
 
-// Override io.Reader.Read
-func (l *Link) Read(p []byte) (n int, err error) {
-	p = <-l.Rcv
-	return len(p), nil
+func (l *Link) ReadPacket() <-chan []byte  { return l.Rcv }
+func (l *Link) WritePacket() chan<- []byte { return l.Tx }
+
+type RouterLink struct {
+	Link
+
+	R      *Router
+	IpId   uint32
+	Nets   []IPv4Net
+	Cipher cipher.Block
 }
 
-// Override io.Writer.Write
-func (l *Link) Write(p []byte) (n int, err error) {
-	l.Tx <- p
-	return len(p), nil
+func NewRouterLink(r *Router, info *RoutingInfo) *RouterLink {
+
+	rl := &RouterLink{}
+	rl.init(r, info)
+	return rl
+}
+
+func (l *RouterLink) init(r *Router, info *RoutingInfo) {
+
+	l.Link.init(&r.Network)
+	l.R = r
+	l.IpId = info.IpId
+	l.Nets = info.Nets
+	l.Cipher = info.Cipher
 }
 
 // Override io.Closer.Close
-func (l *Link) Close() error {
-
-	l.Rcv = nil
-	l.Tx = nil
+func (l *RouterLink) Close() error {
+	l.R.Kick(l.IpId, l.Nets) // notify the router style gc
 	return nil
 }
 
-// struct Link count refrence
-type LinkRef struct {
-	refC *int32
+type StreamLink struct {
+	cc refc.CountCloser
 
-	r    *Router
-	ipId uint32
-	nets []IPv4Net
-
-	*Link
+	rl        *RouterLink
+	RcvStream cipher.Stream
+	TxStream  cipher.Stream
+	txCache   []byte
 }
 
-func (r *Router) registLink(l *Link, ipId uint32, nets []IPv4Net) LinkRef {
+func NewStreamLink(cc refc.CountCloser, ivRcv []byte, ivTx []byte) *StreamLink {
 
-	refC := int32(1)
-	return LinkRef{
+	rl := cc.Obj.(*RouterLink)
 
-		refC: &refC,
-
-		r:    r,
-		ipId: ipId,
-		nets: nets,
-
-		Link: l,
+	return &StreamLink{
+		cc:        cc,
+		rl:        rl,
+		RcvStream: cipher.NewCFBEncrypter(rl.Cipher, ivRcv),
+		TxStream:  cipher.NewCFBDecrypter(rl.Cipher, ivTx),
 	}
 }
 
-func (l LinkRef) Clone() LinkRef {
+// Override io.Reader.Read, block reader
+func (l *StreamLink) Read(p []byte) (n int, err error) {
 
-	atomic.AddInt32(l.refC, 1)
-	return l
-}
-
-func (l LinkRef) NoRef() bool { return atomic.LoadInt32(l.refC) <= 0 }
-
-func (l LinkRef) Close() error {
-
-	if atomic.AddInt32(l.refC, -1) <= 0 {
-		l.r.Kick(l.ipId, l.nets) // notify the router style gc
+	if uint16(len(p)) < l.rl.Mtu {
+		return 0, io.ErrShortBuffer
 	}
-	return nil
+
+	plain := <-l.rl.ReadPacket()
+	if l.rl.Mtu > uint16(len(plain)) {
+		panic(io.ErrShortBuffer) // should not be here
+	}
+
+	l.RcvStream.XORKeyStream(p[:len(plain)], plain)
+	return len(plain), nil
 }
+
+// Override io.Writer.Write, stream writer
+func (l *StreamLink) Write(p []byte) (int, error) {
+
+	total := len(p)
+
+	wn := 0
+	err := error(nil)
+	for p = p[wn:]; len(p) > 0 && err == nil; p = p[wn:] {
+		wn, err = l.writePartial(p)
+	}
+
+	return total - len(p), err
+}
+
+func (l *StreamLink) writePartial(p []byte) (wc int, err error) {
+
+	pl := l.rl.Payload
+	mtu := l.rl.Mtu
+
+	if pl.HeaderSize() > uint16(len(l.txCache)+len(p)) {
+
+		// not enough for a header
+		l.cache(p)
+		wc += len(p)
+		return wc, nil
+	}
+
+	if pl.HeaderSize() > uint16(len(l.txCache)) {
+
+		// cache the header first
+		hdrRstSiz := pl.HeaderSize() - uint16(len(l.txCache))
+		l.cache(p[:hdrRstSiz])
+		wc += int(hdrRstSiz)
+		p = p[hdrRstSiz:]
+	}
+
+	// parse the packet size
+	pktSiz := pl.PacketSize(l.txCache)
+	if pktSiz > mtu {
+		return wc, io.ErrShortWrite
+	}
+	restSiz := pktSiz - uint16(len(l.txCache))
+
+	if restSiz > uint16(len(p)) {
+
+		// not enough for the rest
+		l.cache(p)
+		wc += len(p)
+		return wc, nil
+	}
+
+	// cache the whole packet
+	l.cache(p[:restSiz])
+	wc += int(restSiz)
+	// transmit the packet
+	l.rl.WritePacket() <- l.txCache
+	l.txCache = make([]byte, 0, mtu)
+	return wc, nil
+}
+
+func (l *StreamLink) cache(p []byte) {
+
+	cacheOff := len(l.txCache)
+	l.txCache = l.txCache[:cacheOff+len(p)]
+	l.TxStream.XORKeyStream(l.txCache[cacheOff:], p)
+}
+
+// Override io.Closer.Close
+func (l *StreamLink) Close() error { return l.cc.Close() }

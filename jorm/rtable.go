@@ -73,14 +73,14 @@ func (rtab *RTable) DiscardIP(ipId uint32) {
 	}, ipId)
 }
 
-func (rtab *RTable) RouteIP(ip IPv4) map[uint32]interface{} {
+func (rtab *RTable) RouteIP(ip IPv4) (map[uint32]interface{}, bool) {
 
 	iter := (*skiplist.SkipList)(rtab).Seek(&IPv4Net{
 		IP:   ip,
 		Mask: 0,
 	})
 	if iter == nil {
-		return nil
+		return nil, false
 	}
 	defer iter.Close()
 
@@ -89,9 +89,9 @@ func (rtab *RTable) RouteIP(ip IPv4) map[uint32]interface{} {
 		tuns := iter.Value().(map[uint32]interface{})
 		ipnet := iter.Key().(*IPv4Net)
 		if ipnet.Mask|ipnet.IP == ipnet.Mask|ip {
-			return tuns
+			return tuns, true
 		}
 	}
 
-	return nil
+	return nil, false
 }

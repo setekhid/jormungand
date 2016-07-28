@@ -92,7 +92,7 @@ func (_ RoutingConns) randGwMap(gws map[uint32]interface{}) (uint32, interface{}
 	panic(errors.New("gws is empty"))
 }
 
-// ==========================================================>
+// ===================================== deprecated below
 
 // implement io.ReadWriteCloser
 type Tunnel struct {

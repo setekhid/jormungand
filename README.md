@@ -20,3 +20,10 @@ source nobuild/env.sh
 $GOPATH/bin/jormungand --help
 cat config.json
 ```
+
+## system requirement (running in tunip mode)
+
+only the system with one of features below is supported.
+
+* linux (tuntap)
+* osx (utun)

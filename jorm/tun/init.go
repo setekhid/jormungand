@@ -5,7 +5,7 @@
 package tun
 
 import (
-	_ "github.com/setekhid/jormungand/tungo"
+	_ "github.com/setekhid/jormungand/tunip"
 )
 
 func init() {

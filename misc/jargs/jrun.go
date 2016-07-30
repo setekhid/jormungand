@@ -6,34 +6,38 @@ package jargs
 
 import (
 	"errors"
+	"sync"
 )
 
 var (
-	entries map[string]ModuleEntry
+	entries = map[string]ModuleEntry{}
 )
 
 type ModuleEntry func()
 
-func Entries() map[string]ModuleEntry {
-
-	if entries == nil {
-		entries = map[string]ModuleEntry{}
-	}
-	return entries
-}
-
 func RunInMain(modules []string) {
 
+	waiter := sync.WaitGroup{}
+
 	for _, m := range modules {
-		Entries()[m]()
+
+		entry := entries[m]
+
+		waiter.Add(1)
+		go func() {
+			defer waiter.Done()
+			entry()
+		}()
 	}
+
+	waiter.Wait()
 }
 
 func RegistEntry(module string, entry ModuleEntry) {
 
-	if _, ok := Entries()[module]; ok {
+	if _, ok := entries[module]; ok {
 		panic(errors.New("duplicated module entry " + module))
 	}
 
-	Entries()[module] = entry
+	entries[module] = entry
 }

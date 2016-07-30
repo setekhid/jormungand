@@ -10,33 +10,33 @@ import (
 )
 
 type RedisStor struct {
-	Conn     redis.Conn
-	DBPrefix string
+	Conn  redis.Conn
+	Prefx string
 }
 
 type RedisConf struct {
-	Network  string
-	Address  string
-	DBPrefix string
+	Net   string `json:"net"`
+	Addr  string `json:"addr"`
+	Prefx string `json:"prefx"`
 }
 
 func NewRedisStor(conf *RedisConf) (*RedisStor, error) {
 
-	conn, err := redis.Dial(conf.Network, conf.Address)
+	conn, err := redis.Dial(conf.Net, conf.Addr)
 	if err != nil {
 		return nil, err
 	}
 
 	return &RedisStor{
-		Conn:     conn,
-		DBPrefix: conf.DBPrefix + ":",
+		Conn:  conn,
+		Prefx: conf.Prefx + ":",
 	}, nil
 }
 
 // Override io.Closer.Close
 func (db *RedisStor) Close() error { return db.Conn.Close() }
 
-func (db *RedisStor) dbKey(key string) string { return db.DBPrefix + key }
+func (db *RedisStor) dbKey(key string) string { return db.Prefx + key }
 
 func (db *RedisStor) ReadBfKey(ipId uint32) (BfKeyInfo, bool) {
 

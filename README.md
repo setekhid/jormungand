@@ -18,12 +18,12 @@ go get github.com/setekhid/jormungand
 ```bash
 source nobuild/env.sh
 $GOPATH/bin/jormungand --help
-cat config.json
+nobuild/genargs.js ./args.json `find ./jorm -name 'args.json'`
 ```
 
 ## system requirement (running in tunip mode)
 
-only the system with one of features below is supported.
+only the systems with the features below is supported when using tunip mode, sock5 is in planing.
 
 * linux (tuntap)
 * osx (utun)

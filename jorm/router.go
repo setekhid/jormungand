@@ -10,6 +10,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"github.com/setekhid/jormungand/http/comet"
+	"github.com/setekhid/jormungand/jorm/payload"
 	"github.com/setekhid/jormungand/misc/edgo"
 	"github.com/setekhid/jormungand/misc/refc"
 	"golang.org/x/crypto/blowfish"
@@ -61,9 +62,9 @@ func NewRouter(pool *FishPool) *Router {
 	router.evProc = evProc
 
 	router.Network = Network{
-		Mtu:     Conf().Mtu,
+		Mtu:     payload.Conf().Mtu,
 		Hub:     router.txch,
-		Payload: Conf().payload(),
+		Payload: payload.Funcs(),
 	}
 
 	return router

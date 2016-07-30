@@ -32,9 +32,9 @@ type Stor interface {
 }
 
 type StorConf struct {
-	Type  string     `json:"type"`
-	Dummy *DummyConf `json:"dummy, omitempty"`
-	Redis *RedisConf `json:"redis, omitempty"`
+	Type  string    `json:"type"`
+	Dummy DummyConf `json:"dummy"`
+	Redis RedisConf `json:"redis"`
 }
 
 func (conf *StorConf) RegistJargs() { jargs.Regist(moduleName, conf) }
@@ -46,9 +46,9 @@ func (conf *StorConf) CreateStor() (Stor, error) {
 
 	switch conf.Type {
 	case "dummy":
-		st, err = NewDummyStor(conf.Dummy)
+		st, err = NewDummyStor(&conf.Dummy)
 	case "redis":
-		st, err = NewRedisStor(conf.Redis)
+		st, err = NewRedisStor(&conf.Redis)
 	default:
 		st, err = nil, errors.New("uncognized stor type")
 	}

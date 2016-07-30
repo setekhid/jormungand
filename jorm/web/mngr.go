@@ -8,15 +8,15 @@ import (
 	"github.com/emicklei/go-restful"
 )
 
-type ManagerInstaller struct {
+type managerInstaller struct {
 }
 
 // installing manage apis
-func (ins *ManagerInstaller) Install(restC *restful.Container) {
+func (ins *managerInstaller) Install(restC *restful.Container) {
 
 	ws := new(restful.WebService)
 	ws.
-		Path("/mg").
+		Path(URI_MNGR_PATH).
 		Consumes(restful.MIME_JSON).
 		Produces(restful.MIME_JSON)
 
@@ -30,7 +30,7 @@ func (ins *ManagerInstaller) Install(restC *restful.Container) {
 }
 
 // report a route status
-func (ins *ManagerInstaller) reportRoute(req *restful.Request, resp *restful.Response) {
+func (ins *managerInstaller) reportRoute(req *restful.Request, resp *restful.Response) {
 
 	// TODO
 }

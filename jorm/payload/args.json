@@ -1,0 +1,6 @@
+{
+	"payload": {
+		"type": "tunip",
+		"mtu": 1500
+	}
+}

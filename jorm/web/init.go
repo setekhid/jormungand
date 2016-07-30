@@ -9,7 +9,6 @@ import (
 )
 
 func init() {
-
 	jargs.Regist(moduleName, &EntryConfig{})
-	jargs.RegistEntry(moduleName, func() { go Entry().ListenAndServe() })
+	jargs.RegistEntry(moduleName, func() { Entry().ListenAndServe() })
 }

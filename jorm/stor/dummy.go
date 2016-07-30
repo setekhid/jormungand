@@ -6,26 +6,33 @@ package stor
 
 import (
 	"encoding/binary"
+	"net"
 )
 
 type DummyStor struct {
+	keys map[uint32][]byte
 }
 
-type DummyConf bool
+type DummyConf struct {
+	IpIds []string `json:"ip_ids"`
+}
 
-func NewDummyStor(conf *DummyConf) (*DummyStor, error) { return &DummyStor{}, nil }
+func NewDummyStor(conf *DummyConf) (*DummyStor, error) {
 
-var (
-	dummyBfKeys = map[uint32][]byte{
-		binary.BigEndian.Uint32([]byte{192, 168, 89, 123}): []byte{192, 168, 89, 123},
-		binary.BigEndian.Uint32([]byte{192, 168, 89, 133}): []byte{192, 168, 89, 133},
-		binary.BigEndian.Uint32([]byte{192, 168, 89, 143}): []byte{192, 168, 89, 143},
+	keys := map[uint32][]byte{}
+
+	for _, ipid := range conf.IpIds {
+
+		ip := []byte(net.ParseIP(ipid))
+		keys[binary.BigEndian.Uint32(ip)] = []byte(ipid + ".key")
 	}
-)
+
+	return &DummyStor{keys: keys}, nil
+}
 
 func (db *DummyStor) ReadBfKey(ipId uint32) (BfKeyInfo, bool) {
 
-	if key, ok := dummyBfKeys[ipId]; ok {
+	if key, ok := db.keys[ipId]; ok {
 		return BfKeyInfo{Key: key, TTL: defaultTTL}, true
 	}
 	return BfKeyInfo{}, false

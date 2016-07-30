@@ -7,6 +7,5 @@ package stor
 import ()
 
 func init() {
-
 	(&StorConf{}).RegistJargs()
 }

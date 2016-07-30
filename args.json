@@ -1,5 +1,5 @@
 {
 	"main": {
-		"modules": "web, tun"
+		"modules": "web, sel, tun"
 	}
 }

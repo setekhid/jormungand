@@ -2,32 +2,30 @@
 // Use of this source code is governed by BSD 3-clause
 // license that can be found in the LICENSE file.
 
-package jorm
+package payload
 
 import (
-	"github.com/setekhid/jormungand/jorm/payload"
 	"github.com/setekhid/jormungand/misc/jargs"
 )
 
 const (
-	moduleName = "jorm"
+	moduleName = "payload"
 )
 
 var (
-	conf = &Config{}
+	conf  = &Config{}
+	funcs = Payload(nil)
 )
 
 type Config struct {
-	Payload string `json:"payload"`
-	Mtu     uint16 `json:"mtu"`
-
-	payloadInst payload.Payload `json:"-"`
+	Type string `json:"type"`
+	Mtu  uint16 `json:"mtu"`
 }
 
 func (c *Config) fillEmpty() *Config {
 
-	if len(c.Payload) <= 0 {
-		c.Payload = "tunip"
+	if len(c.Type) <= 0 {
+		c.Type = "tunip"
 	}
 	if c.Mtu <= 0 {
 		c.Mtu = 1500
@@ -35,12 +33,12 @@ func (c *Config) fillEmpty() *Config {
 	return c
 }
 
-func (c *Config) payload() payload.Payload {
+func Funcs() Payload {
 
-	if c.payloadInst == nil {
-		c.payloadInst = payload.NewPayload(c.Payload)
+	if funcs == nil {
+		funcs = NewPayload(Conf().Type)
 	}
-	return c.payloadInst
+	return funcs
 }
 
 func Conf() *Config { return jargs.Module(moduleName).(*Config).fillEmpty() }

@@ -21,6 +21,7 @@ type HeaderInfo struct {
 }
 
 func NewPayload(name string) Payload {
+
 	switch name {
 	case "tunip":
 		return TunIP{}

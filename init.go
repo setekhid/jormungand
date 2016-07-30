@@ -5,7 +5,9 @@
 package main
 
 import (
+	_ "github.com/setekhid/jormungand/jorm/payload"
 	_ "github.com/setekhid/jormungand/jorm/sel"
+	_ "github.com/setekhid/jormungand/jorm/sox"
 	_ "github.com/setekhid/jormungand/jorm/stor"
 	_ "github.com/setekhid/jormungand/jorm/tun"
 	_ "github.com/setekhid/jormungand/jorm/web"

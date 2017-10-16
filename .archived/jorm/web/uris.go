@@ -4,8 +4,6 @@
 
 package web
 
-import ()
-
 const (
 	URI_UPDOWN_PATH = "/hey"
 	URI_FAKER_PATH  = "/blabla"

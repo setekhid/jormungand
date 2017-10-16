@@ -4,8 +4,6 @@
 
 package jorm
 
-import ()
-
 const (
 	JORMNET_MTU = 1500
 )

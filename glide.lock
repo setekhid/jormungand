@@ -1,0 +1,8 @@
+hash: d87682e483e882bdd67ce8677647f7f6cbe9fddc23d699ace3c73f08eb8c5503
+updated: 2017-10-16T15:17:43.709577296+08:00
+imports:
+- name: github.com/spf13/cobra
+  version: 7b2c5ac9fc04fc5efafb60700713d4fa609b777b
+- name: github.com/spf13/pflag
+  version: e57e3eeb33f795204c1ca35f56c44f83227c6e66
+testImports: []

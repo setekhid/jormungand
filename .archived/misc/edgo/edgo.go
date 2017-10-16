@@ -4,8 +4,6 @@
 
 package edgo
 
-import ()
-
 type Event interface {
 	Type() int
 }

@@ -4,8 +4,6 @@
 
 package tun
 
-import ()
-
 func init() {
 	(&Config{}).registJargs()
 	(&Entry{}).registEntry()

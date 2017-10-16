@@ -9,16 +9,13 @@ NOTICE, if this repository offends any groups' and/or individuals' right, I didn
 ## install
 
 ```bash
-source nobuild/env.sh
-go get github.com/setekhid/jormungand
+go get -u github.com/setekhid/jormungand/cmd/jormungand
 ```
 
 ## usage
 
 ```bash
-source nobuild/env.sh
-$GOPATH/bin/jormungand --help
-nobuild/genargs.js ./args.json `find ./jorm -name 'args.json'`
+$GOBIN/jormungand --help
 ```
 
 ## system requirement (running in tunip mode)
